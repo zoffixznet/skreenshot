@@ -1,8 +1,9 @@
 """Clipboard: mime composition and persistence.
 
 X11 CLIPBOARD is ownership-based: the data lives in the owning process and
-dies with it. Verified in a bare Xvfb: Qt setMimeData followed by exit makes
-`xclip -o -t image/png` fail with "target not available". The fix is what
+dies with it. On a bare X server with no clipboard manager, Qt setMimeData
+followed by exit makes `xclip -o -t image/png` fail with "target not
+available". The fix is what
 xclip itself does: after taking ownership, keep a background process serving
 selection requests until another client takes ownership (SelectionClear),
 then exit.

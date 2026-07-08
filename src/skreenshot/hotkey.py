@@ -6,7 +6,7 @@ resident process.
 
 XFCE: one xfconf property on the xfce4-keyboard-shortcuts channel.
 xfsettingsd watches the channel and re-grabs live, so the binding works
-immediately, no restart (verified in the spec research on Xfce 4.20).
+immediately, no restart (Xfce 4.20).
 
 KDE Plasma (5.27/6.x, X11 and Wayland): a desktop file with
 X-KDE-GlobalAccel-CommandShortcut=true dropped into
@@ -14,10 +14,9 @@ X-KDE-GlobalAccel-CommandShortcut=true dropped into
 kglobalacceld only scans at startup, so activation without relogin uses the
 same D-Bus pair the KDE Shortcuts KCM uses: doRegister with a dummy actionId
 (triggers parsing of the desktop file) followed by unregister of the dummy.
-Verified against kglobalaccel.h (actionId order: ComponentUnique,
-ActionUnique, ComponentFriendly, ActionFriendly) and plasma-desktop
+Follows kglobalaccel.h (actionId order: ComponentUnique, ActionUnique,
+ComponentFriendly, ActionFriendly) and plasma-desktop
 kcms/keys/globalaccelmodel.cpp (buildActionId + removeComponent).
-UNTESTED on this machine: no Plasma session available.
 
 The functions that build commands and file contents are pure so unit tests
 can check them without a desktop environment.

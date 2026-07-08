@@ -6,8 +6,8 @@ units that matter:
 - logical coordinates: what Qt widgets and QScreen.geometry() report. The
   overlay window, mouse events and screen layout all live here.
 - device pixels: what the grabbed pixmap actually contains. On X11 the grab
-  is devicePixelRatio times larger than the logical size (verified live with
-  QT_SCALE_FACTOR=2: a 640x400 logical screen grabs as 1280x800 pixels).
+  is devicePixelRatio times larger than the logical size (e.g. with
+  QT_SCALE_FACTOR=2 a 640x400 logical screen grabs as 1280x800 pixels).
 
 The logical-to-device mapping follows flameshot's extendedRect (rect * dpr)
 but rounds the edges instead of truncating each component, matching what

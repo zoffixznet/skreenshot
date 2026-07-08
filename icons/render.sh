@@ -1,7 +1,7 @@
 #!/bin/sh
 # Render the icon SVG to the PNG sizes desktop entries want.
-# Uses ImageMagick's convert (its MSVG renderer is enough for this SVG;
-# rsvg-convert and inkscape are not installed on the reference machine).
+# Uses ImageMagick's convert (its MSVG renderer is enough for this SVG, so
+# rsvg-convert and inkscape are not required).
 # Run from anywhere: paths are relative to this script.
 set -eu
 

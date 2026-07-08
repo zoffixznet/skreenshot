@@ -29,10 +29,10 @@ make install-hotkey   # binds Shift+Super+S (XFCE or KDE, autodetected)
 `make uninstall` and `make uninstall-hotkey` reverse both. `make help`
 lists every target. Make sure `~/.local/bin` is on your PATH.
 
-Note: the installed `~/.local/bin/skreenshot` runs under the system `python3`,
-so `make deps` (which installs PyQt6 into `.venv`) covers running from the
-checkout via `make run`. For the standalone command/hotkey to work, PyQt6 also
-has to be importable by the system `python3`.
+The installed `~/.local/bin/skreenshot` is a symlink back to this checkout, and
+the launcher re-execs itself under the checkout's `.venv`, so the standalone
+command and the hotkey use the same deps `make deps` installed. Keep the
+checkout (and its `.venv`) in place.
 
 ## Running
 
@@ -110,17 +110,21 @@ over, exactly like `xclip` does.
 
 ## Known limitations
 
-- KDE Plasma support (Klipper mime flag, kglobalaccel hotkey install) is
-  implemented from the primary sources (Spectacle, kglobalaccel,
-  plasma-desktop) but is untested here: this machine runs XFCE only.
-- Multi-monitor compositing follows the flameshot-verified geometry and
-  is unit-tested hard, but only a single monitor exists on this machine,
-  so it has not been exercised on real hardware.
-- The launched-from-hotkey keyboard grab race (the DE daemon holds the
-  keyboard until the shortcut keys are released) is handled by not
-  grabbing the keyboard at all; the overlay is a normal focused window.
-  A real hotkey launch was verified once on XFCE via a synthetic
-  keypress, not across DEs.
+- KDE Plasma / KWin (X11): the multi-monitor overlay works (see below). The
+  hotkey install (kglobalaccel) and the Klipper `x-kde-force-image-copy` mime
+  flag are implemented from the primary sources (Spectacle, kglobalaccel,
+  plasma-desktop) but are not yet end-to-end tested against a live
+  kglobalacceld/Klipper.
+- Multi-monitor: the overlay spans the whole virtual desktop as one window, so a
+  single drag can cross every screen. It pins a fixed window size
+  (WM_NORMAL_HINTS min == max == the desktop union), which stops window managers
+  such as KWin from clamping the overlay to a single monitor. Monitors of
+  different heights or offsets leave corners of the union bounding box that no
+  monitor covers; a drag into those corners captures them as black.
+- The launched-from-hotkey keyboard grab race (the DE daemon holds the keyboard
+  until the shortcut keys are released) is handled by not grabbing the keyboard
+  at all; the overlay is a normal focused window. This path has not been
+  exercised across every desktop environment.
 - Wayland is not supported in v1. The tool detects a Wayland session and
   exits with a clear error instead of capturing a black screen.
 - If the overlay loses focus (another window activates), it cancels

@@ -3,10 +3,13 @@ dimmed, with the dragged region punched out.
 
 Window recipe (flameshot capturewidget.cpp, proven on xfwm4 and KWin X11):
 
-- WindowStaysOnTopHint | FramelessWindowHint | Tool, resized manually to the
-  virtual-desktop union rect. A real _NET_WM_STATE_FULLSCREEN window gets
-  clamped to a single monitor by the WM; a plain borderless window moved and
-  sized by hand does not.
+- WindowStaysOnTopHint | FramelessWindowHint | Tool, with a FIXED size equal
+  to the virtual-desktop union rect. A real _NET_WM_STATE_FULLSCREEN window
+  gets clamped to a single monitor by the WM -- and so does a plain borderless
+  window sized by hand with no size hints (KWin clamps it to one monitor).
+  Declaring a fixed size publishes WM_NORMAL_HINTS
+  min == max == union, which is what makes the WM honor the full span across
+  every monitor (the same min==max primitive KDE Spectacle uses per window).
 - Qt.X11BypassWindowManagerHint is deliberately NOT used: unmanaged windows
   receive no keyboard input unless manually focused, and flameshot removed
   the flag after it caused crashes on X11 GNOME. The scars are the point.
@@ -56,6 +59,12 @@ class SelectionOverlay(QWidget):
             | Qt.WindowType.Tool
         )
         # Manual geometry over the whole virtual desktop, not fullscreen state.
+        # A fixed size equal to the union sets WM size hints (WM_NORMAL_HINTS
+        # min == max), which KWin honors; without them KWin clamps the frameless
+        # window to a single monitor's work area, so the overlay would otherwise
+        # cover only one screen on multi-monitor setups. xfwm4 and other
+        # ICCCM-compliant WMs respect the same hint.
+        self.setFixedSize(union.w, union.h)
         self.setGeometry(QRect(union.x, union.y, union.w, union.h))
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.setMouseTracking(True)

@@ -39,10 +39,6 @@ def grab_virtual_desktop(app):
     monitor (flameshot PR #4127). Per-screen grabs composited at
     screen.topLeft() - union.topLeft() are correct by construction.
     """
-    from PyQt6.QtCore import QPoint
-    from PyQt6.QtGui import QPainter, QPixmap
-    from PyQt6.QtCore import Qt
-
     screens = app.screens()
     if not screens:
         raise CaptureError("no screens reported by the X server")
@@ -66,35 +62,54 @@ def grab_virtual_desktop(app):
         )
         return pixmap, union
 
-    # DPR is uniform across screens on X11 (it is a global scale factor),
-    # so compositing in logical coordinates is safe (flameshot's comment in
-    # x11LegacyScreenshot; Spectacle's Geometry.cpp makes the same call).
-    dpr = screens[0].devicePixelRatio()
-    canvas = QPixmap(round(union.w * dpr), round(union.h * dpr))
-    canvas.setDevicePixelRatio(dpr)
-    canvas.fill(Qt.GlobalColor.black)
-
-    painter = QPainter(canvas)
-    grabbed_any = False
+    # Grab every screen and composite. Each grab keeps its OWN device pixel
+    # ratio; composite_desktop sizes the canvas at the largest DPR present, so
+    # a mixed-scaling layout (a HiDPI screen beside a 1x screen) composites and
+    # crops correctly, while a uniform-DPR layout stays a 1:1 copy.
+    grabs = []
     for screen, rect in zip(screens, rects):
         grab = screen.grabWindow(0)
         if grab.isNull() or grab.width() == 0:
             log.warning("capture: screen %s grab failed, leaving it black", rect)
             continue
-        grab.setDevicePixelRatio(dpr)
         dx, dy = screen_offset(rect, union)
-        painter.drawPixmap(QPoint(dx, dy), grab)
-        grabbed_any = True
-    painter.end()
+        grabs.append((grab, dx, dy, screen.devicePixelRatio()))
 
-    if not grabbed_any:
+    if not grabs:
         raise CaptureError("X11 screen grab returned an empty image")
 
+    canvas = composite_desktop(grabs, union)
     log.info(
         "capture: %d screens composited into %dx%d device px, dpr=%s",
-        len(screens),
+        len(grabs),
         canvas.width(),
         canvas.height(),
-        dpr,
+        canvas.devicePixelRatio(),
     )
     return canvas, union
+
+
+def composite_desktop(grabs, union):
+    """Composite per-screen grabs into one pixmap covering the union rect.
+
+    grabs is a list of (pixmap, dx, dy, dpr): each screen's device-pixel grab,
+    its logical offset within the union (screen.topLeft() - union.topLeft()),
+    and that screen's own device pixel ratio. The canvas is sized at the
+    largest DPR present so a high-DPI screen keeps full resolution; each grab
+    is tagged with its own DPR and drawn at its logical offset, so Qt scales it
+    into the shared device space. A single uniform DPR reduces to a 1:1 copy.
+    """
+    from PyQt6.QtCore import QPoint, Qt
+    from PyQt6.QtGui import QPainter, QPixmap
+
+    dpr = max((g[3] for g in grabs), default=1.0)
+    canvas = QPixmap(round(union.w * dpr), round(union.h * dpr))
+    canvas.setDevicePixelRatio(dpr)
+    canvas.fill(Qt.GlobalColor.black)
+
+    painter = QPainter(canvas)
+    for grab, dx, dy, grab_dpr in grabs:
+        grab.setDevicePixelRatio(grab_dpr)
+        painter.drawPixmap(QPoint(dx, dy), grab)
+    painter.end()
+    return canvas

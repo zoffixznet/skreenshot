@@ -20,7 +20,7 @@ help: ## list all targets with what they do
 	@echo "skreenshot make targets:"
 	@awk -F':.*## ' '/^[a-z0-9-]+:.*## / { printf "  %-18s %s\n", $$1, $$2 }' Makefile
 
-install: ## symlink skreenshot into ~/.local/bin and install icons
+install: $(DEPS_RUN) ## symlink skreenshot into ~/.local/bin and install icons
 	mkdir -p $(BINDIR)
 	ln -sfn $(ROOT)/skreenshot $(BINDIR)/skreenshot
 	for size in 48 128 256; do \

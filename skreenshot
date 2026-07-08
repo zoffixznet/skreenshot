@@ -1,17 +1,34 @@
 #!/usr/bin/env python3
 """skreenshot launcher, at the repo root so it is obvious what to run.
+
 Records t0 before any heavy import so the overlay timing line measures real
-user-perceived latency, then finds the package under src/ relative to this
-script's real location (works from a repo checkout and from the
-~/.local/bin symlink `make install` creates)."""
+user-perceived latency. If a project .venv sits next to this script (the
+`make deps` layout), re-exec under its interpreter so PyQt6 is importable even
+when started as the installed ~/.local/bin symlink or from a desktop hotkey,
+which otherwise run under the system python3. Then find the package under src/
+relative to this script's real location (works from a repo checkout and from
+the ~/.local/bin symlink `make install` creates)."""
 
 import os
 import sys
 import time
 
-T0 = time.monotonic()
+# Earliest measurable point. Propagate it across the venv re-exec below
+# (time.monotonic() is comparable across processes on the same Linux boot) so
+# the overlay timing still counts from the very first process start.
+T0 = float(os.environ.pop("_SKREENSHOT_T0", "") or time.monotonic())
 
 _root = os.path.dirname(os.path.realpath(__file__))
+
+# Re-exec under the project venv's python when we are not already in it, so the
+# deps installed by `make deps` are importable no matter which python we were
+# launched with (system python3 via the symlink/hotkey, or the venv directly).
+_venv_dir = os.path.join(_root, ".venv")
+_venv_py = os.path.join(_venv_dir, "bin", "python")
+if os.path.exists(_venv_py) and os.path.realpath(sys.prefix) != os.path.realpath(_venv_dir):
+    os.environ["_SKREENSHOT_T0"] = repr(T0)
+    os.execv(_venv_py, [_venv_py, os.path.realpath(__file__), *sys.argv[1:]])
+
 _src = os.path.join(_root, "src")
 if os.path.isdir(os.path.join(_src, "skreenshot")):
     sys.path.insert(0, _src)

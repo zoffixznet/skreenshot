@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""skreenshot launcher, at the repo root so it is obvious what to run.
+Records t0 before any heavy import so the overlay timing line measures real
+user-perceived latency, then finds the package under src/ relative to this
+script's real location (works from a repo checkout and from the
+~/.local/bin symlink `make install` creates)."""
+
+import os
+import sys
+import time
+
+T0 = time.monotonic()
+
+_root = os.path.dirname(os.path.realpath(__file__))
+_src = os.path.join(_root, "src")
+if os.path.isdir(os.path.join(_src, "skreenshot")):
+    sys.path.insert(0, _src)
+
+from skreenshot.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main(t0=T0))

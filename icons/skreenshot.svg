@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- skreenshot icon: selection-corner brackets around a crosshair.
+     Hand-authored; kept to shapes ImageMagick's built-in MSVG renderer
+     handles (rects, lines, circles), since rsvg/inkscape are not
+     available to render it. Regenerate PNGs with `make icons`. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- background: rounded dark slate tile -->
+  <rect x="8" y="8" width="240" height="240" rx="40" ry="40" fill="#1c2733"/>
+  <!-- selection corner brackets -->
+  <g fill="#e8eef4">
+    <!-- top-left -->
+    <rect x="44" y="44" width="52" height="16" rx="8"/>
+    <rect x="44" y="44" width="16" height="52" rx="8"/>
+    <!-- top-right -->
+    <rect x="160" y="44" width="52" height="16" rx="8"/>
+    <rect x="196" y="44" width="16" height="52" rx="8"/>
+    <!-- bottom-left -->
+    <rect x="44" y="196" width="52" height="16" rx="8"/>
+    <rect x="44" y="160" width="16" height="52" rx="8"/>
+    <!-- bottom-right -->
+    <rect x="160" y="196" width="52" height="16" rx="8"/>
+    <rect x="196" y="160" width="16" height="52" rx="8"/>
+  </g>
+  <!-- crosshair -->
+  <g fill="#4da3ff">
+    <rect x="122" y="84" width="12" height="34" rx="6"/>
+    <rect x="122" y="138" width="12" height="34" rx="6"/>
+    <rect x="84" y="122" width="34" height="12" rx="6"/>
+    <rect x="138" y="122" width="34" height="12" rx="6"/>
+  </g>
+  <circle cx="128" cy="128" r="10" fill="none" stroke="#4da3ff" stroke-width="8"/>
+</svg>

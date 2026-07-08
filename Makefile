@@ -46,7 +46,7 @@ deps: $(DEPS_RUN) ## install runtime deps (PyQt6) into a local .venv
 
 $(DEPS_RUN):
 	$(PYTHON) -m venv $(VENV)
-	$(VENV)/bin/pip -q install PyQt6
+	$(VENV)/bin/pip -q install PyQt6 PyYAML
 	touch $@
 
 deps-dev: $(DEPS_DEV) ## install runtime + dev/test deps (pytest, ruff) into .venv

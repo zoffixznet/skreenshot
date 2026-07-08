@@ -38,8 +38,9 @@ DEFAULT_DIM_ALPHA = 140  # spec suggests 110-160 of 255
 
 class SelectionOverlay(QWidget):
     """Fullscreen frozen-frame overlay. Calls on_done exactly once with
-    ("selected", Rect) in window-local logical coordinates, or
-    ("cancelled", reason), or ("error", message)."""
+    ("selected", Rect, save) in window-local logical coordinates (save is True
+    when Shift was held at release), or ("cancelled", reason), or
+    ("error", message)."""
 
     def __init__(self, pixmap, union, on_done, dim_alpha=DEFAULT_DIM_ALPHA):
         super().__init__()
@@ -187,8 +188,17 @@ class SelectionOverlay(QWidget):
             # A click or sub-3px drag is a cancel, not a 1x1 screenshot.
             self._cancel("click-or-tiny-drag")
             return
-        log.info("selection: %dx%d at (%d, %d) logical", sel.w, sel.h, sel.x, sel.y)
-        self._finish(("selected", sel))
+        # Shift held at release also saves the PNG to a file (see cli._save_png).
+        save = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        log.info(
+            "selection: %dx%d at (%d, %d) logical, save=%s",
+            sel.w,
+            sel.h,
+            sel.x,
+            sel.y,
+            save,
+        )
+        self._finish(("selected", sel, save))
 
     def keyPressEvent(self, event):  # noqa: N802 - Qt virtual
         self._guard("keyPressEvent", lambda: self._key_press(event))

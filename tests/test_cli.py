@@ -7,11 +7,14 @@ matters, and in-process where it does not.
 import os
 import subprocess
 import sys
+import tempfile
 
 from skreenshot import cli
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LAUNCHER = os.path.join(REPO, "skreenshot")
+# Keep config-file creation out of the real ~/.config during tests.
+_CONFIG_HOME = tempfile.mkdtemp(prefix="skreenshot-test-config-")
 
 
 def run_cli(args=(), env_overrides=None, drop=()):
@@ -20,6 +23,7 @@ def run_cli(args=(), env_overrides=None, drop=()):
         for k, v in os.environ.items()
         if k not in ("DISPLAY", "WAYLAND_DISPLAY", "XDG_SESSION_TYPE", *drop)
     }
+    env["XDG_CONFIG_HOME"] = _CONFIG_HOME
     if env_overrides:
         env.update(env_overrides)
     return subprocess.run(
@@ -107,22 +111,37 @@ class TestInstanceLock:
             os.close(fd)
 
 
-class TestDimAlpha:
-    def test_default(self, monkeypatch):
-        monkeypatch.delenv("SKREENSHOT_DIM", raising=False)
-        assert cli._dim_alpha_from_env() == cli.DEFAULT_DIM_ALPHA
+class TestSaveName:
+    def test_default_screenshot_name_24h_format(self):
+        import time
 
-    def test_valid_override(self, monkeypatch):
-        monkeypatch.setenv("SKREENSHOT_DIM", "120")
-        assert cli._dim_alpha_from_env() == 120
+        tm = time.struct_time((2026, 7, 8, 18, 30, 0, 0, 0, -1))
+        assert cli.default_screenshot_name(tm) == "screenshot-2026-07-08-18h30m.png"
 
-    def test_clamped(self, monkeypatch):
-        monkeypatch.setenv("SKREENSHOT_DIM", "999")
-        assert cli._dim_alpha_from_env() == 255
+    def test_default_screenshot_name_zero_pads(self):
+        import time
 
-    def test_garbage_falls_back(self, monkeypatch):
-        monkeypatch.setenv("SKREENSHOT_DIM", "dark")
-        assert cli._dim_alpha_from_env() == cli.DEFAULT_DIM_ALPHA
+        tm = time.struct_time((2026, 1, 2, 3, 4, 0, 0, 0, -1))
+        assert cli.default_screenshot_name(tm) == "screenshot-2026-01-02-03h04m.png"
+
+    def test_ensure_png_appends_when_missing(self):
+        assert cli._ensure_png("/a/b/foo") == "/a/b/foo.png"
+
+    def test_ensure_png_keeps_existing_extension(self):
+        assert cli._ensure_png("/a/b/foo.png") == "/a/b/foo.png"
+
+    def test_ensure_png_is_case_insensitive(self):
+        assert cli._ensure_png("/a/b/foo.PNG") == "/a/b/foo.PNG"
+
+    def test_write_png_writes_exact_bytes_and_adds_extension(self, tmp_path):
+        out = cli._write_png(b"\x89PNG-data", str(tmp_path / "shot"))
+        assert out == str(tmp_path / "shot.png")
+        assert open(out, "rb").read() == b"\x89PNG-data"
+
+    def test_write_png_reports_error_and_returns_none(self, tmp_path, capsys):
+        out = cli._write_png(b"x", str(tmp_path / "no-such-dir" / "shot.png"))
+        assert out is None
+        assert "could not save" in capsys.readouterr().err
 
 
 class TestHoldClipboardErrors:

@@ -122,6 +122,8 @@ class XvfbSession:
         env["XDG_SESSION_TYPE"] = "x11"
         env["DISPLAY"] = self.display
         env["XDG_RUNTIME_DIR"] = str(self.tmpdir)
+        # Keep config-file creation out of the real ~/.config during e2e.
+        env["XDG_CONFIG_HOME"] = str(self.tmpdir)
         env.update(extra)
         return env
 

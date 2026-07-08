@@ -2,8 +2,8 @@
 
 A Linux clone of the Windows Shift+Win+S snipping flow, reduced to its core:
 press a hotkey, the screen freezes and dims, drag a rectangle, and on release
-the region is on the clipboard as a PNG. Esc cancels. Nothing else: no
-editor, no annotations, no save dialog, no tray icon.
+the region is on the clipboard as a PNG (hold Shift while releasing to also save
+it to a file). Esc cancels. Nothing else: no editor, no annotations, no tray icon.
 
 X11 only (XFCE and KDE Plasma). On a Wayland session it prints one error
 line and exits; it never produces a black capture.
@@ -11,7 +11,7 @@ line and exits; it never produces a black capture.
 ## Requirements
 
 - Python 3 with `venv`. `make deps` creates a local `.venv` and pip-installs
-  PyQt6 into it; `make deps-dev` also installs the dev/test tools (pytest, ruff).
+  PyQt6 and PyYAML into it; `make deps-dev` adds the dev/test tools (pytest, ruff).
 - X11 session.
 - For the end-to-end tests only: the system tools `Xvfb`, `xdotool`, `xclip`
   and ImageMagick, from your OS package manager (pip can't provide these).
@@ -44,8 +44,10 @@ skreenshot
 
 (or `make run` from the checkout). Drag with the left button; release
 copies the selection to the clipboard and the overlay disappears
-immediately. Cancel with Esc, a right-click, or a click without a drag;
-cancel never touches the clipboard.
+immediately. Hold **Shift** while releasing to also open a Save-As dialog and
+write the PNG to a file (name pre-filled `screenshot-YYYY-MM-DD-HHhMMm.png`, in
+the folder from `save_dir`). Cancel with Esc, a right-click, or a click without
+a drag; cancel never touches the clipboard.
 
 Exit codes: 0 image copied, 2 cancelled, 1 error. A detached helper
 process may briefly outlive the command; it serves the clipboard until
@@ -73,12 +75,17 @@ DE's shortcut settings instead of running `--install-hotkey`.
 
 ## Configuration
 
-None, by design. Two environment variables exist for debugging and taste:
+A YAML file at `~/.config/skreenshot/config.yaml` (honoring `XDG_CONFIG_HOME`),
+created with commented defaults on first run. Edit it by hand; every key is
+optional:
 
-- `SKREENSHOT_LOG=/path/to/file` appends a debug log (session, capture
-  size, selection, copy sizes, timing, cancel reason).
-- `SKREENSHOT_DIM=0..255` sets the overlay dim opacity (default 140).
-- `--verbose` prints the same log lines to stderr.
+- `save_dir` — folder the Shift+drag Save-As dialog opens to (default
+  `~/Pictures`, falling back to your home directory if it does not exist).
+- `dim` — overlay dim opacity, 0–255 (default 140).
+- `log_file` — path to append a debug log to (empty = none).
+
+For a single run, `SKREENSHOT_DIM` and `SKREENSHOT_LOG` override `dim` and
+`log_file`, and `--verbose` also prints the log lines to stderr.
 
 ## Testing
 

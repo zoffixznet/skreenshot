@@ -15,7 +15,7 @@ import re
 import sys
 import time
 
-from . import __version__
+from . import __version__, config
 from .session import check_session
 
 log = logging.getLogger("skreenshot")
@@ -23,8 +23,6 @@ log = logging.getLogger("skreenshot")
 EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_CANCELLED = 2
-
-DEFAULT_DIM_ALPHA = 140
 
 
 def parse_args(argv):
@@ -35,9 +33,9 @@ def parse_args(argv):
             "as a PNG. Esc cancels. X11 only."
         ),
         epilog=(
-            "Environment: SKREENSHOT_LOG=FILE appends a debug log; "
-            "SKREENSHOT_DIM=0..255 sets overlay dim opacity (default %d)."
-            % DEFAULT_DIM_ALPHA
+            "Config: ~/.config/skreenshot/config.yaml (save_dir, dim, log_file). "
+            "SKREENSHOT_DIM and SKREENSHOT_LOG override dim/log_file for one run. "
+            "Hold Shift while releasing a drag to also save the PNG to a file."
         ),
     )
     parser.add_argument("--version", action="version", version=__version__)
@@ -67,11 +65,10 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 
-def setup_logging(verbose):
+def setup_logging(verbose, log_file):
     handlers = []
-    logfile = os.environ.get("SKREENSHOT_LOG")
-    if logfile:
-        handlers.append(logging.FileHandler(logfile))
+    if log_file:
+        handlers.append(logging.FileHandler(log_file))
     if verbose:
         handlers.append(logging.StreamHandler(sys.stderr))
     if not handlers:
@@ -120,37 +117,46 @@ def fail(message):
     return EXIT_ERROR
 
 
-def run_capture(t0, verbose):
+def run_capture(t0, verbose, cfg):
     """The whole interactive flow. Assumes session and lock checks passed."""
     from PyQt6.QtWidgets import QApplication
 
-    from . import capture
+    from . import capture, clip
     from .overlay import SelectionOverlay
 
     app = QApplication(sys.argv[:1])
     outcome = {"code": EXIT_ERROR, "message": "internal error"}
 
     try:
-        dim_alpha = _dim_alpha_from_env()
         pixmap, union = capture.grab_virtual_desktop(app)
 
         def on_done(result):
-            kind, payload = result
+            kind = result[0]
             try:
                 if kind == "selected":
-                    _copy_selection(pixmap, payload, verbose)
+                    sel = result[1]
+                    save = result[2] if len(result) > 2 else False
+                    png = _crop_to_png(pixmap, sel)
+                    clip.copy_png(png, verbose=verbose)
                     outcome.update(code=EXIT_OK, message=None)
+                    if save:
+                        # Saving is best effort: never let a save-side failure
+                        # override the successful copy's exit code.
+                        try:
+                            _save_png(png, cfg.save_dir)
+                        except Exception:  # noqa: BLE001
+                            log.exception("save failed")
                 elif kind == "cancelled":
                     outcome.update(code=EXIT_CANCELLED, message=None)
                 else:
-                    outcome.update(code=EXIT_ERROR, message=str(payload))
+                    outcome.update(code=EXIT_ERROR, message=str(result[1]))
             except Exception as exc:  # noqa: BLE001
-                log.exception("copy failed")
+                log.exception("capture handling failed")
                 outcome.update(code=EXIT_ERROR, message=str(exc))
             finally:
                 app.quit()
 
-        overlay = SelectionOverlay(pixmap, union, on_done, dim_alpha=dim_alpha)
+        overlay = SelectionOverlay(pixmap, union, on_done, dim_alpha=cfg.dim)
         overlay.show_and_activate()
         app.processEvents()
         if t0 is not None:
@@ -182,19 +188,8 @@ def run_capture(t0, verbose):
     return outcome["code"]
 
 
-def _dim_alpha_from_env():
-    raw = os.environ.get("SKREENSHOT_DIM", "")
-    if not raw:
-        return DEFAULT_DIM_ALPHA
-    try:
-        return min(255, max(0, int(raw)))
-    except ValueError:
-        log.warning("ignoring invalid SKREENSHOT_DIM=%r", raw)
-        return DEFAULT_DIM_ALPHA
-
-
-def _copy_selection(pixmap, sel, verbose):
-    """Crop the frozen pixmap to the selection and hand it to the clipboard."""
+def _crop_to_png(pixmap, sel):
+    """Crop the frozen pixmap to the selection and return PNG bytes."""
     from . import clip
     from .geometry import logical_to_device
 
@@ -203,20 +198,68 @@ def _copy_selection(pixmap, sel, verbose):
     image = pixmap.toImage().copy(device.x, device.y, device.w, device.h)
     png = clip.encode_png(image)
     log.info(
-        "copy: %dx%d device px (dpr=%s), %d PNG bytes",
+        "crop: %dx%d device px (dpr=%s), %d PNG bytes",
         image.width(),
         image.height(),
         dpr,
         len(png),
     )
-    clip.copy_png(png, verbose=verbose)
+    return png
+
+
+def default_screenshot_name(tm):
+    """Pre-filled Save-As name: screenshot-YYYY-MM-DD-HHhMMm.png (24-hour)."""
+    return time.strftime("screenshot-%Y-%m-%d-%Hh%Mm.png", tm)
+
+
+def _ensure_png(path):
+    """Append .png unless the path already ends in .png (case-insensitive)."""
+    return path if path.lower().endswith(".png") else path + ".png"
+
+
+def _write_png(png, path):
+    """Write PNG bytes to path (ensuring a .png suffix). Returns the final path,
+    or None if the write failed (already reported to stderr)."""
+    path = _ensure_png(path)
+    try:
+        with open(path, "wb") as fh:
+            fh.write(png)
+        log.info("save: wrote %d bytes to %s", len(png), path)
+        return path
+    except OSError as exc:
+        print(f"skreenshot: could not save {path}: {exc}", file=sys.stderr)
+        log.error("save failed: %s", exc)
+        return None
+
+
+def _save_png(png, save_dir):
+    """Show a Save-As dialog seeded from save_dir and write the PNG there.
+
+    Best effort: a cancel or an error only affects the on-disk copy, never the
+    exit code (the clipboard copy already happened). setDefaultSuffix keeps the
+    dialog's overwrite confirmation on the final .png name.
+    """
+    from PyQt6.QtWidgets import QFileDialog
+
+    start_dir = save_dir if os.path.isdir(save_dir) else os.path.expanduser("~")
+    dialog = QFileDialog(None, "Save screenshot", start_dir, "PNG image (*.png)")
+    dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+    dialog.setDefaultSuffix("png")
+    dialog.selectFile(default_screenshot_name(time.localtime()))
+    if not dialog.exec():
+        log.info("save: dialog cancelled")
+        return
+    selected = dialog.selectedFiles()
+    if selected:
+        _write_png(png, selected[0])
 
 
 def main(argv=None, t0=None):
     if t0 is None:
         t0 = time.monotonic()
     args = parse_args(argv if argv is not None else sys.argv[1:])
-    setup_logging(args.verbose)
+    cfg = config.load()
+    setup_logging(args.verbose, cfg.log_file)
 
     if args.hold_clipboard:
         from . import clip
@@ -243,7 +286,7 @@ def main(argv=None, t0=None):
         return fail("another skreenshot overlay is already active")
 
     try:
-        return run_capture(t0, args.verbose)
+        return run_capture(t0, args.verbose, cfg)
     except Exception as exc:  # noqa: BLE001 - top-level guard, no tracebacks
         log.exception("fatal")
         return fail(str(exc))

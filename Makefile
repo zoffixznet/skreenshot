@@ -8,10 +8,13 @@ BINDIR := $(PREFIX)/bin
 ICONDIR := $(PREFIX)/share/icons/hicolor
 ROOT := $(abspath .)
 VENV := .venv
+VENV_PY := $(VENV)/bin/python
+DEPS_RUN := $(VENV)/.deps-run
+DEPS_DEV := $(VENV)/.deps-dev
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install uninstall install-hotkey uninstall-hotkey run test e2e lint icons clean
+.PHONY: help deps deps-dev install uninstall install-hotkey uninstall-hotkey run test e2e lint icons clean
 
 help: ## list all targets with what they do
 	@echo "skreenshot make targets:"
@@ -39,21 +42,30 @@ install-hotkey: ## bind Shift+Super+S to skreenshot (XFCE or KDE)
 uninstall-hotkey: ## remove the Shift+Super+S binding
 	$(ROOT)/skreenshot --uninstall-hotkey
 
-run: ## run skreenshot from the checkout, verbose
-	$(ROOT)/skreenshot --verbose
+deps: $(DEPS_RUN) ## install runtime deps (PyQt6) into a local .venv
 
-test: ## run the unit tests (no display needed)
-	$(PYTHON) -m pytest -m "not e2e" -q
+$(DEPS_RUN):
+	$(PYTHON) -m venv $(VENV)
+	$(VENV)/bin/pip -q install PyQt6
+	touch $@
 
-e2e: ## run the end-to-end smoke tests on a private Xvfb
-	$(PYTHON) -m pytest -m e2e -q
+deps-dev: $(DEPS_DEV) ## install runtime + dev/test deps (pytest, ruff) into .venv
 
-lint: $(VENV)/bin/ruff ## lint the source with ruff (bootstraps a venv)
+$(DEPS_DEV): $(DEPS_RUN)
+	$(VENV)/bin/pip -q install pytest ruff
+	touch $@
+
+run: $(DEPS_RUN) ## run skreenshot from the checkout, verbose
+	$(VENV_PY) $(ROOT)/skreenshot --verbose
+
+test: $(DEPS_DEV) ## run the unit tests (no display needed)
+	$(VENV_PY) -m pytest -m "not e2e" -q
+
+e2e: $(DEPS_DEV) ## run the end-to-end smoke tests on a private Xvfb
+	$(VENV_PY) -m pytest -m e2e -q
+
+lint: $(DEPS_DEV) ## lint the source with ruff
 	$(VENV)/bin/ruff check src tests skreenshot
-
-$(VENV)/bin/ruff:
-	$(PYTHON) -m venv --system-site-packages $(VENV)
-	$(VENV)/bin/pip -q install ruff
 
 icons: ## re-render icon PNGs from the SVG source
 	./icons/render.sh

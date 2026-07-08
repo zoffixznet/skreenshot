@@ -10,22 +10,29 @@ line and exits; it never produces a black capture.
 
 ## Requirements
 
-- Python 3 and PyQt6 from your distro (`python3-pyqt6` on Debian/Kali/Ubuntu).
-  Do not pip-install PyQt6; the distro package is the supported path.
+- Python 3 with `venv`. `make deps` creates a local `.venv` and pip-installs
+  PyQt6 into it; `make deps-dev` also installs the dev/test tools (pytest, ruff).
 - X11 session.
-- For the test suite: `Xvfb`, `xdotool`, `xclip`, ImageMagick, `pytest`.
+- For the end-to-end tests only: the system tools `Xvfb`, `xdotool`, `xclip`
+  and ImageMagick, from your OS package manager (pip can't provide these).
 
 ## Install
 
 ```
 git clone <this repo>
 cd skreenshot
+make deps             # create .venv and pip-install PyQt6
 make install          # symlinks ~/.local/bin/skreenshot, installs icons
 make install-hotkey   # binds Shift+Super+S (XFCE or KDE, autodetected)
 ```
 
 `make uninstall` and `make uninstall-hotkey` reverse both. `make help`
 lists every target. Make sure `~/.local/bin` is on your PATH.
+
+Note: the installed `~/.local/bin/skreenshot` runs under the system `python3`,
+so `make deps` (which installs PyQt6 into `.venv`) covers running from the
+checkout via `make run`. For the standalone command/hotkey to work, PyQt6 also
+has to be importable by the system `python3`.
 
 ## Running
 
@@ -78,8 +85,11 @@ None, by design. Two environment variables exist for debugging and taste:
 ```
 make test    # unit tests, no display needed
 make e2e     # end-to-end: real app on a private Xvfb, driven by xdotool
-make lint    # ruff, bootstrapped into a local venv
+make lint    # ruff
 ```
+
+`test`, `e2e` and `lint` each depend on `make deps-dev`, so they install pytest
+and ruff into `.venv` on first run if they are not there yet.
 
 The e2e suite verifies crop dimensions and pixel content against a known
 screen pattern, clipboard survival after process exit with no clipboard

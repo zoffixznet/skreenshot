@@ -50,6 +50,23 @@ def test_overlay_size_pinned_for_negative_origin_union(qapp):
     assert ov.maximumSize() == QSize(union.w, union.h)
 
 
+def test_overlay_snaps_back_to_union_origin_when_wm_moves_it(qapp):
+    # KWin re-places a frameless window on the primary monitor after mapping;
+    # when the primary is not the top-left monitor that shifts the frozen
+    # composite out of alignment. The overlay must snap back to the union origin.
+    # moveEvent only fires once the window is mapped, so show it first.
+    union = Rect(50, 60, 200, 200)
+    ov = _overlay(union)
+    ov.show()
+    qapp.processEvents()
+    ov.move(500, 500)  # simulate the window manager shoving the window elsewhere
+    qapp.processEvents()
+    try:
+        assert (ov.x(), ov.y()) == (union.x, union.y)
+    finally:
+        ov.hide()
+
+
 def _drag_release(qapp, modifier):
     """Build an overlay mid-drag and release the left button with `modifier`.
     Returns the result tuple passed to on_done.

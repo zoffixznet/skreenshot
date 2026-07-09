@@ -44,6 +44,7 @@ class SelectionOverlay(QWidget):
 
     def __init__(self, pixmap, union, on_done, dim_alpha=DEFAULT_DIM_ALPHA):
         super().__init__()
+        self._union_pos = (union.x, union.y)
         self._pixmap = pixmap
         self._on_done = on_done
         self._dim_alpha = dim_alpha
@@ -76,6 +77,17 @@ class SelectionOverlay(QWidget):
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def moveEvent(self, event):  # noqa: N802 - Qt virtual
+        # Some window managers (e.g. KWin) ignore the requested top-left of a
+        # frameless window and re-place it on the primary monitor after mapping.
+        # When the primary monitor is not the top-left one, that shifts the
+        # frozen composite out of alignment with the physical screens. Snap back
+        # to the union origin whenever the WM moves us off it; the correction
+        # converges in a single step.
+        ux, uy = self._union_pos
+        if self.x() != ux or self.y() != uy:
+            self.move(ux, uy)
 
     def _finish(self, result):
         if self._finished:

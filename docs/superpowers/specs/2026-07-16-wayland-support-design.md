@@ -34,7 +34,10 @@ unchanged.
 On `wayland`, the CLI does `os.environ.setdefault("QT_QPA_PLATFORM",
 "wayland")` before Qt loads: a user-set value always wins (flameshot's
 unconditional override is a documented mistake), and running as an XWayland
-client would make `grabWindow(0)` silently capture black.
+client would make `grabWindow(0)` silently capture black. The compositor
+socket is also pre-checked (`wayland_socket_error`): Qt aborts the whole
+process with qFatal when the wayland platform plugin cannot connect, so a
+dead `WAYLAND_DISPLAY` must fail with a normal error line before Qt loads.
 
 ## Capture (`portal.py`, `capture.py`)
 
@@ -117,6 +120,17 @@ the caller focused — we are). The hard part is surviving exit:
   Qt only writes on the data source's `send` — exiting immediately races
   them. The mime data is subclassed to observe reads; the grace ends early
   once a consumer finished reading (plus idle margin) or at a fixed cap.
+- Robustness rules on top of the plan (added during review): right after the
+  copy a ~150 ms settle check (`selection_accepted`) distinguishes a
+  compositor *rejection* — which arrives as a cancel within one round trip —
+  from a later legitimate replacement. A rejected copy is recovered through
+  wl-copy or reported as an error (exit 1), never silently dropped. A
+  clipboard the user already replaced (e.g. while the save dialog was open)
+  is left alone. A wl-copy hand-off failure falls back to in-process serving
+  rather than aborting. And before any open-ended serving, the process
+  releases the single-instance lock: no overlay exists at that point, so a
+  new invocation must be allowed to start one (its copy then also releases
+  the old server).
 
 ## CLI (`cli.py`)
 

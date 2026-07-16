@@ -1,13 +1,20 @@
-"""X11 screen capture: grab first, composite per-screen grabs into one
-pixmap over the virtual-desktop union (flameshot's x11LegacyScreenshot).
+"""Screen capture: grab first, before any window of ours exists.
 
-Freeze-frame means the grab happens before any window of ours exists, so
+X11: composite per-screen grabWindow(0) grabs into one pixmap over the
+virtual-desktop union (flameshot's x11LegacyScreenshot). Freeze-frame means
 there is no unmap race (xfce4-screenshooter has to sleep 200 ms after hiding
 its live overlay to avoid capturing its own fade-out) and no compositor
 requirement.
+
+Wayland: clients cannot read the screen; the xdg-desktop-portal Screenshot
+call (portal.py) returns one PNG that every known backend (KWin, Mutter,
+grim) composites over the same union-of-outputs box this module uses, at a
+uniform scale equal to the largest output scale. Only the device-pixel-ratio
+tag has to be derived here; the geometry model is shared with X11.
 """
 
 import logging
+import os
 
 from .geometry import Rect, screen_offset, union_rect
 
@@ -87,6 +94,83 @@ def grab_virtual_desktop(app):
         canvas.devicePixelRatio(),
     )
     return canvas, union
+
+
+def derive_portal_dpr(image_w, image_h, union):
+    """Device pixel ratio of a portal screenshot relative to the logical union.
+
+    Every studied portal backend renders the composite at max(output scale),
+    so width / logical-width IS the scale. The height is checked only to warn:
+    a mismatch means the backend cropped or letterboxed in a way we cannot
+    correct blind, and a width-derived ratio is still the best available map.
+    """
+    if union.w <= 0 or union.h <= 0:
+        raise CaptureError("virtual desktop union has no size")
+    dpr_w = image_w / union.w
+    dpr_h = image_h / union.h
+    if abs(dpr_w - dpr_h) > 0.02:
+        log.warning(
+            "portal image %dx%d does not scale uniformly to the %dx%d union "
+            "(w-ratio %.3f, h-ratio %.3f); using the width ratio",
+            image_w,
+            image_h,
+            union.w,
+            union.h,
+            dpr_w,
+            dpr_h,
+        )
+    # A near-integer ratio IS that integer: pixel-exact crops beat the
+    # sub-pixel noise of integer image sizes divided by integer unions.
+    nearest = round(dpr_w)
+    if nearest >= 1 and abs(dpr_w - nearest) < 0.01:
+        return float(nearest)
+    return dpr_w
+
+
+def grab_wayland(app):
+    """Portal grab. Returns (pixmap, union_rect) like grab_virtual_desktop.
+
+    The pixmap covers the whole virtual desktop with its devicePixelRatio
+    set, so the overlay and crop code shared with X11 applies unchanged.
+    """
+    from PyQt6.QtGui import QPixmap
+
+    from . import portal
+
+    screens = app.screens()
+    if not screens:
+        raise CaptureError("no screens reported by the compositor")
+    rects = screen_rects(screens)
+    union = union_rect(rects)
+
+    path = portal.capture_fullscreen_png()
+    try:
+        pixmap = QPixmap(path)
+    finally:
+        # The portal wrote the file for us (into ~/Pictures on KDE/GNOME);
+        # nothing else ever deletes it.
+        try:
+            os.unlink(path)
+        except OSError as exc:
+            log.warning("capture: could not remove portal file %s: %s", path, exc)
+
+    if pixmap.isNull() or pixmap.width() == 0:
+        raise CaptureError(
+            f"the desktop portal's screenshot (from {path}) was not a "
+            "readable image"
+        )
+
+    dpr = derive_portal_dpr(pixmap.width(), pixmap.height(), union)
+    pixmap.setDevicePixelRatio(dpr)
+    log.info(
+        "capture: portal image %dx%d device px over %dx%d logical union, dpr=%s",
+        pixmap.width(),
+        pixmap.height(),
+        union.w,
+        union.h,
+        dpr,
+    )
+    return pixmap, union
 
 
 def composite_desktop(grabs, union):

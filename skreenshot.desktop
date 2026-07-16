@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=skreenshot
+Comment=Freeze the screen, drag a rectangle, PNG on the clipboard
+Exec=skreenshot
+Icon=skreenshot
+Terminal=false
+NoDisplay=true
+Categories=Utility;Graphics;

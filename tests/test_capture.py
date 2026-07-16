@@ -13,7 +13,7 @@ import pytest
 from PyQt6.QtGui import QColor, QPixmap
 from PyQt6.QtWidgets import QApplication
 
-from skreenshot.capture import composite_desktop
+from skreenshot.capture import CaptureError, composite_desktop, derive_portal_dpr
 from skreenshot.geometry import Rect
 
 
@@ -61,3 +61,32 @@ def test_composite_mixed_dpr_scales_and_places_each_screen(qapp):
     # A occupies device x 0..400 (dpr=1 grab upscaled 2x); B device x 400..600.
     assert QColor(img.pixel(200, 100)) == QColor("red")
     assert QColor(img.pixel(500, 100)) == QColor("blue")
+
+
+class TestPortalDpr:
+    """dpr of a portal screenshot: every portal backend composites all
+    outputs at max(output scale) over the logical union, so the width ratio
+    is the scale."""
+
+    def test_exact_match_is_one(self):
+        assert derive_portal_dpr(2560, 800, Rect(0, 0, 2560, 800)) == 1.0
+
+    def test_hidpi_double(self):
+        assert derive_portal_dpr(5120, 1600, Rect(0, 0, 2560, 800)) == 2.0
+
+    def test_fractional_scale_kept(self):
+        dpr = derive_portal_dpr(3200, 1000, Rect(0, 0, 2560, 800))
+        assert abs(dpr - 1.25) < 0.001
+
+    def test_near_integer_snaps(self):
+        # Rounding in the compositor can make a 2x image a pixel short;
+        # 2559/1280 must still be treated as the integer scale 2.
+        assert derive_portal_dpr(2559, 1599, Rect(0, 0, 1280, 800)) == 2.0
+
+    def test_height_mismatch_uses_width_ratio(self):
+        # A letterboxed/cropped backend: width ratio wins, no exception.
+        assert derive_portal_dpr(2560, 700, Rect(0, 0, 2560, 800)) == 1.0
+
+    def test_zero_union_raises(self):
+        with pytest.raises(CaptureError):
+            derive_portal_dpr(100, 100, Rect(0, 0, 0, 0))

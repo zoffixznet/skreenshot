@@ -14,26 +14,29 @@ DEPS_DEV := $(VENV)/.deps-dev
 
 .DEFAULT_GOAL := help
 
-.PHONY: help deps deps-dev install uninstall install-hotkey uninstall-hotkey run test e2e lint icons clean
+.PHONY: help deps deps-dev install uninstall install-hotkey uninstall-hotkey run test e2e e2e-wayland lint icons clean
 
 help: ## list all targets with what they do
 	@echo "skreenshot make targets:"
 	@awk -F':.*## ' '/^[a-z0-9-]+:.*## / { printf "  %-18s %s\n", $$1, $$2 }' Makefile
 
-install: $(DEPS_RUN) ## symlink skreenshot into ~/.local/bin and install icons
+install: $(DEPS_RUN) ## symlink skreenshot into ~/.local/bin, install icons and .desktop
 	mkdir -p $(BINDIR)
 	ln -sfn $(ROOT)/skreenshot $(BINDIR)/skreenshot
 	for size in 48 128 256; do \
 		mkdir -p $(ICONDIR)/$${size}x$${size}/apps; \
 		cp icons/skreenshot-$${size}.png $(ICONDIR)/$${size}x$${size}/apps/skreenshot.png; \
 	done
+	mkdir -p $(PREFIX)/share/applications
+	cp skreenshot.desktop $(PREFIX)/share/applications/skreenshot.desktop
 	@echo "installed: $(BINDIR)/skreenshot (make sure $(BINDIR) is on PATH)"
 
-uninstall: ## remove the ~/.local/bin symlink and icons
+uninstall: ## remove the ~/.local/bin symlink, icons and .desktop
 	rm -f $(BINDIR)/skreenshot
 	for size in 48 128 256; do \
 		rm -f $(ICONDIR)/$${size}x$${size}/apps/skreenshot.png; \
 	done
+	rm -f $(PREFIX)/share/applications/skreenshot.desktop
 	@echo "uninstalled (hotkey binding, if any, is removed by uninstall-hotkey)"
 
 install-hotkey: ## bind Shift+Super+S to skreenshot (XFCE or KDE)
@@ -59,10 +62,13 @@ run: $(DEPS_RUN) ## run skreenshot from the checkout, verbose
 	$(VENV_PY) $(ROOT)/skreenshot --verbose
 
 test: $(DEPS_DEV) ## run the unit tests (no display needed)
-	$(VENV_PY) -m pytest -m "not e2e" -q
+	$(VENV_PY) -m pytest -m "not e2e and not e2e_wayland" -q
 
-e2e: $(DEPS_DEV) ## run the end-to-end smoke tests on a private Xvfb
+e2e: $(DEPS_DEV) ## run the X11 end-to-end smoke tests on a private Xvfb
 	$(VENV_PY) -m pytest -m e2e -q
+
+e2e-wayland: $(DEPS_DEV) ## run the Wayland end-to-end tests on a nested kwin_wayland
+	$(VENV_PY) -m pytest -m e2e_wayland -q
 
 lint: $(DEPS_DEV) ## lint the source with ruff
 	$(VENV)/bin/ruff check src tests skreenshot

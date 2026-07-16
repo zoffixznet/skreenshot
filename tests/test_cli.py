@@ -36,22 +36,29 @@ def run_cli(args=(), env_overrides=None, drop=()):
 
 
 class TestWrongEnvironment:
-    def test_wayland_session_one_error_line_nonzero(self):
-        result = run_cli(
-            env_overrides={"XDG_SESSION_TYPE": "wayland", "DISPLAY": ":0"}
-        )
-        assert result.returncode == 1
-        lines = [ln for ln in result.stderr.splitlines() if ln.strip()]
-        assert len(lines) == 1
-        assert "wayland" in lines[0].lower()
-        assert result.stdout == ""
-
     def test_no_display_one_error_line_nonzero(self):
         result = run_cli()
         assert result.returncode == 1
         lines = [ln for ln in result.stderr.splitlines() if ln.strip()]
         assert len(lines) == 1
         assert "DISPLAY" in lines[0]
+
+    def test_dead_wayland_display_fails_cleanly(self, tmp_path):
+        # WAYLAND_DISPLAY set but no compositor socket behind it: the wayland
+        # backend is chosen and the run must end in one error line before Qt
+        # loads (Qt would abort the process), not a traceback or a hang.
+        # XDG_RUNTIME_DIR is pinned so the socket pre-check actually resolves
+        # a path on machines where the ambient variable is unset.
+        result = run_cli(
+            env_overrides={
+                "WAYLAND_DISPLAY": "skreenshot-test-no-such-socket",
+                "XDG_RUNTIME_DIR": str(tmp_path),
+                "QT_QPA_PLATFORM": "wayland",
+            }
+        )
+        assert result.returncode == 1
+        assert "Traceback" not in result.stderr
+        assert "socket" in result.stderr.lower()
 
     def test_error_is_not_a_traceback(self):
         result = run_cli(env_overrides={"XDG_SESSION_TYPE": "wayland"})
@@ -85,6 +92,27 @@ class TestInstanceLock:
         monkeypatch.setenv("DISPLAY", ":99")
         p99 = cli._lock_path()
         assert p0 != p99
+
+    def test_wayland_lock_keyed_by_wayland_display(self, monkeypatch):
+        monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+        p0 = cli._lock_path("wayland")
+        monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+        p1 = cli._lock_path("wayland")
+        assert p0 != p1
+
+    def test_wayland_and_x11_locks_are_independent(self, monkeypatch):
+        # A wayland session with XWayland has both displays; a forced-xcb
+        # run must not be blocked by (or block) the native-wayland lock.
+        monkeypatch.setenv("DISPLAY", ":0")
+        monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+        assert cli._lock_path("x11") != cli._lock_path("wayland")
+
+    def test_wayland_absolute_socket_path_is_flattened(self, monkeypatch):
+        # Since Wayland 1.15 WAYLAND_DISPLAY may be an absolute path; the
+        # lock file name must flatten its separators, not nest directories.
+        monkeypatch.setenv("WAYLAND_DISPLAY", "/run/user/1000/wayland-0")
+        path = cli._lock_path("wayland")
+        assert os.path.basename(path) == "skreenshot-wl-_run_user_1000_wayland_0.lock"
 
     def test_second_acquire_fails_while_held(self, monkeypatch, tmp_path):
         monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))

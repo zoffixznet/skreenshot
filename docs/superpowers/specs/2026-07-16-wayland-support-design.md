@@ -154,12 +154,14 @@ the caller focused — we are). The hard part is surviving exit:
   a focused Qt client in the nested session. Auto-skips when tools are
   missing. Multi-output via `--output-count 2` (nested output windows are
   moved apart with xdotool; KWin lays outputs left-to-right).
-- This machine's KWin 5.27 packages clash with libwayland 1.23 (KWin's stale
-  `wl_shm_interface` v1 symbol shadows libwayland's v2 → `wl_global_create`
-  fails → no `wl_shm` global → every shm client crashes). The harness works
+- Some distributions pair a KWin 5.27 built against an older libwayland with
+  a newer libwayland 1.23 at runtime (KWin's stale `wl_shm_interface` v1
+  symbol shadows libwayland's v2 → `wl_global_create` fails → no `wl_shm`
+  global → every shm client crashes). The harness detects that and works
   around it by bind-mounting a capability-stripped copy of the binary in a
   user namespace and preloading current core interface structs. This is a
-  harness-only concern; real Wayland sessions ship consistent stacks.
+  harness-only concern; a running Wayland desktop session implies a
+  consistent stack.
 
 ## Known risks (unresolvable without a live desktop Wayland session)
 
